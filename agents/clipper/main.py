@@ -1,16 +1,29 @@
-import os
-import subprocess
 import base64
 import json
+import os
+import subprocess
 import tempfile
 from flask import Flask, jsonify, request
 from google.cloud import firestore, storage
 
 app = Flask(__name__)
 
-PROJECT_ID = "sparring-ai-prod"
-RAW_BUCKET_NAME = "sparring-ai-raw-videos"
-CLIPS_BUCKET_NAME = "sparring-ai-clips"
+# --- CHARGEMENT INTELLIGENT DE LA CONFIGURATION ---
+def load_config():
+    local_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config/config.json'))
+    docker_path = '/app/config/config.json'
+    path = local_path if os.path.exists(local_path) else docker_path
+    
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+config = load_config()
+
+# --- VARIABLES GLOBALES DYNAMIQUES ---
+PROJECT_ID = config["project_id"]
+RAW_BUCKET_NAME = config["gcs"]["raw_videos_bucket"]
+CLIPS_BUCKET_NAME = config["gcs"]["processed_clips_bucket"]
+FIRESTORE_COLLECTION = config["firestore"]["collection_videos"]
 
 db = firestore.Client(project=PROJECT_ID)
 storage_client = storage.Client(project=PROJECT_ID)
@@ -36,7 +49,7 @@ def clip_video():
   video_id = payload.get("video_id", "BCESF0pDe6Q")
 
   # 1. Récupérer les métadonnées depuis Firestore
-  doc_ref = db.collection("videos_metadata").document(video_id)
+  doc_ref = db.collection(FIRESTORE_COLLECTION).document(video_id)
   doc = doc_ref.get()
 
   if not doc.exists:

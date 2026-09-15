@@ -8,14 +8,29 @@ from google.genai import types
 
 app = Flask(__name__)
 
-PROJECT_ID = "sparring-ai-prod"
-LOCATION = "us-central1"
-MODEL_NAME = "gemini-2.5-flash"
+# --- CHARGEMENT INTELLIGENT DE LA CONFIGURATION ---
+def load_config():
+    # Cherche le fichier en local ou dans le conteneur Docker
+    local_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config/config.json'))
+    docker_path = '/app/config/config.json'
+    path = local_path if os.path.exists(local_path) else docker_path
+    
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+config = load_config()
+
+# --- VARIABLES GLOBALES DYNAMIQUES ---
+PROJECT_ID = config["project_id"]
+LOCATION = config["region"]
+MODEL_NAME = config["ai"]["model_name"]
+FIRESTORE_COLLECTION = config["firestore"]["collection_videos"]
+TOPIC_ANALYZED = config["pubsub"]["sparring_detected_topic"]
 
 client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
 db = firestore.Client(project=PROJECT_ID)
 publisher = pubsub_v1.PublisherClient()
-topic_path = publisher.topic_path(PROJECT_ID, "topic-video-analyzed")
+topic_path = publisher.topic_path(PROJECT_ID, TOPIC_ANALYZED)
 
 def extract_payload(request_data):
     """Décode les données de la requête (Appel direct HTTP ou Push Pub/Sub)"""
@@ -46,7 +61,7 @@ def analyze():
     clips_data = json.loads(response.text)
 
     # 2. Sauvegarde Firestore
-    db.collection("videos_metadata").document(video_id).set(
+    db.collection(FIRESTORE_COLLECTION).document(video_id).set(
         {"video_id": video_id, "video_gcs_uri": video_uri, "clips": clips_data, "status": "ANALYZED", "analyzed_at": firestore.SERVER_TIMESTAMP},
         merge=True,
     )

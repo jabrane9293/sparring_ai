@@ -2,108 +2,83 @@ import base64
 import json
 import os
 import tempfile
-from flask import Flask, jsonify, request
-from google.cloud import firestore, pubsub_v1, storage
 import yt_dlp
+from flask import Flask, jsonify, request
+from google.cloud import storage, firestore, pubsub_v1
 
 app = Flask(__name__)
 
-PROJECT_ID = os.environ.get("GCP_PROJECT", "sparring-ai-prod")
-BUCKET_NAME = "sparring-ai-raw-videos"
-TOPIC_NAME = "video-downloaded"
+# --- CONFIGURATION ---
+def load_config():
+    local_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config/config.json'))
+    docker_path = '/app/config/config.json'
+    path = local_path if os.path.exists(local_path) else docker_path
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+config = load_config()
+PROJECT_ID = config["project_id"]
+RAW_BUCKET_NAME = config["gcs"]["raw_videos_bucket"]
+TOPIC_DOWNLOADED = config["pubsub"]["video_downloaded_topic"]
+FIRESTORE_COLLECTION = config["firestore"]["collection_videos"]
 
 storage_client = storage.Client(project=PROJECT_ID)
 db = firestore.Client(project=PROJECT_ID)
 publisher = pubsub_v1.PublisherClient()
-topic_path = publisher.topic_path(PROJECT_ID, TOPIC_NAME)
+topic_path = publisher.topic_path(PROJECT_ID, TOPIC_DOWNLOADED)
 
-
-class DownloadAgent:
-
-  def __init__(self, bucket_name):
-    self.bucket = storage_client.bucket(bucket_name)
-
-  def download_and_upload(self, video_id, video_url):
-    with tempfile.TemporaryDirectory() as temp_dir:
-      # Modèle souple : laisse yt-dlp attribuer la vraie extension (ex: .webm, .mp4, .mkv)
-      output_template = os.path.join(temp_dir, f"{video_id}.%(ext)s")
-
-      ydl_opts = {
-          "outtmpl": output_template,
-          "quiet": True,
-          "no_warnings": True,
-      }
-
-      print(f"Téléchargement de la vidéo {video_id}...")
-      with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([video_url])
-
-      # Récupération automatique du fichier généré dans le dossier temporaire
-      downloaded_files = os.listdir(temp_dir)
-      if not downloaded_files:
-        raise FileNotFoundError(
-            f"Aucun fichier n'a été téléchargé pour la vidéo {video_id}."
-        )
-
-      file_name = downloaded_files[0]
-      local_file_path = os.path.join(temp_dir, file_name)
-
-      # Définition du nom sur Cloud Storage avec l'extension réelle
-      gcs_blob_name = f"raw/{file_name}"
-      blob = self.bucket.blob(gcs_blob_name)
-
-      print(
-          f"Transfert de {file_name} vers Cloud Storage"
-          f" gs://{BUCKET_NAME}/{gcs_blob_name}..."
-      )
-      blob.upload_from_filename(local_file_path)
-
-      gcs_uri = f"gs://{BUCKET_NAME}/{gcs_blob_name}"
-      return gcs_uri
-
+def extract_payload(request_data):
+    if request_data and "message" in request_data and "data" in request_data["message"]:
+        decoded = base64.b64decode(request_data["message"]["data"]).decode("utf-8")
+        return json.loads(decoded)
+    return request_data or {}
 
 @app.route("/download", methods=["POST"])
-def download_endpoint():
-  data = request.get_json() or {}
+def download():
+    payload = extract_payload(request.get_json())
+    video_id = payload.get("video_id")
+    video_url = payload.get("url")
 
-  if "message" in data and "data" in data["message"]:
-    payload = base64.b64decode(data["message"]["data"]).decode("utf-8")
-    payload_data = json.loads(payload)
-  else:
-    payload_data = data
+    if not video_id or not video_url:
+        return jsonify({"status": "error", "message": "video_id ou url manquant"}), 400
 
-  video_id = payload_data.get("video_id")
-  video_url = payload_data.get("url")
+    try:
+        # 1. Télécharger la vidéo localement
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            temp_path = os.path.join(tmpdirname, f"{video_id}.webm")
+            
+            ydl_opts = {
+                'format': 'bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]/best',
+                'outtmpl': temp_path,
+                'quiet': True
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
 
-  if not video_id or not video_url:
-    return jsonify({"error": "Paramètres 'video_id' et 'url' requis."}), 400
+            # 2. Uploader sur Cloud Storage (GCS)
+            bucket = storage_client.bucket(RAW_BUCKET_NAME)
+            blob = bucket.blob(f"raw/{video_id}.webm")
+            blob.upload_from_filename(temp_path)
+            gcs_uri = f"gs://{RAW_BUCKET_NAME}/raw/{video_id}.webm"
 
-  try:
-    agent = DownloadAgent(BUCKET_NAME)
-    gcs_uri = agent.download_and_upload(video_id, video_url)
+        # 3. Initialiser le document dans Firestore
+        db.collection(FIRESTORE_COLLECTION).document(video_id).set({
+            "video_id": video_id,
+            "source_url": video_url,
+            "video_gcs_uri": gcs_uri,
+            "status": "DOWNLOADED",
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
 
-    # 1. Mise à jour dans Firestore
-    doc_ref = db.collection("videos_metadata").document(video_id)
-    doc_ref.update({"status": "DOWNLOADED", "gcs_uri": gcs_uri})
+        # 4. Déclencher l'Agent 3 (Analyzer) via Pub/Sub
+        message_data = json.dumps({"video_id": video_id, "video_gcs_uri": gcs_uri}).encode("utf-8")
+        publisher.publish(topic_path, message_data)
 
-    # 2. Notification Pub/Sub
-    event_data = {
-        "video_id": video_id,
-        "gcs_uri": gcs_uri,
-        "fighter_name": payload_data.get("fighter_name"),
-    }
-    publisher.publish(topic_path, json.dumps(event_data).encode("utf-8"))
+        return jsonify({"status": "success", "video_id": video_id})
 
-    return (
-        jsonify({"status": "success", "video_id": video_id, "gcs_uri": gcs_uri}),
-        200,
-    )
-
-  except Exception as e:
-    print(f"Erreur lors du traitement : {e}")
-    return jsonify({"error": str(e)}), 500
-
+    except Exception as e:
+        print(f"Erreur de téléchargement: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
-  port = int(os.environ.get("PORT", 8081))
-  app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=8081)

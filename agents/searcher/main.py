@@ -1,81 +1,48 @@
-import os
 import json
-import yt_dlp
-from flask import Flask, request, jsonify
-from google.cloud import pubsub_v1, firestore
+import os
+from flask import Flask, jsonify, request
+from google.cloud import pubsub_v1
 
 app = Flask(__name__)
 
-PROJECT_ID = os.environ.get("GCP_PROJECT", "sparring-ai-prod")
-TOPIC_NAME = "video-discovered"
+# --- CONFIGURATION ---
+def load_config():
+    local_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config/config.json'))
+    docker_path = '/app/config/config.json'
+    path = local_path if os.path.exists(local_path) else docker_path
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
-db = firestore.Client(project=PROJECT_ID)
+config = load_config()
+PROJECT_ID = config["project_id"]
+TOPIC_DISCOVERED = config["pubsub"]["video_discovered_topic"]
+
 publisher = pubsub_v1.PublisherClient()
-topic_path = publisher.topic_path(PROJECT_ID, TOPIC_NAME)
+topic_path = publisher.topic_path(PROJECT_ID, TOPIC_DISCOVERED)
 
-class SearchAgent:
-    def __init__(self, max_results=3):
-        self.max_results = max_results
-        self.ydl_opts = {
-            'quiet': True,
-            'extract_flat': True,
-            'force_generic_extractor': False,
-        }
+@app.route("/scrape", methods=["POST"])
+def scrape():
+    # Cet agent est appelé directement par Streamlit, on lit donc un JSON classique
+    payload = request.get_json() or {}
+    fighter = payload.get("fighter", "Default Fighter")
+    max_videos = payload.get("max_videos", 1)
 
-    def search_and_publish(self, fighter_name):
-        search_query = f"ytsearch{self.max_results}:{fighter_name} sparring training vlog"
-        discovered_videos = []
+    # TODO Phase 3: Intégrer la vraie logique de recherche (ex: API YouTube)
+    # Pour le moment, on simule la découverte d'une vidéo (celle qui marche bien)
+    print(f"Recherche de {max_videos} vidéos pour {fighter}...")
+    
+    discovered_videos = [
+        {"video_id": "BCESF0pDe6Q", "url": "https://www.youtube.com/watch?v=BCESF0pDe6Q"}
+    ]
 
-        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
-            try:
-                result = ydl.extract_info(search_query, download=False)
-                if 'entries' in result:
-                    for entry in result['entries']:
-                        video_id = entry.get('id')
-                        if not video_id:
-                            continue
+    # Pour chaque vidéo trouvée, on lance une instance de l'Agent 2 via Pub/Sub
+    published_count = 0
+    for video in discovered_videos:
+        message_data = json.dumps(video).encode("utf-8")
+        publisher.publish(topic_path, message_data)
+        published_count += 1
 
-                        video_data = {
-                            'video_id': video_id,
-                            'title': entry.get('title'),
-                            'url': entry.get('url'),
-                            'duration': entry.get('duration'),
-                            'uploader': entry.get('uploader'),
-                            'fighter_name': fighter_name,
-                            'status': 'DISCOVERED'
-                        }
-
-                        # 1. Sauvegarde dans Firestore
-                        db.collection('videos_metadata').document(video_id).set(video_data)
-
-                        # 2. Notification aux autres agents via Pub/Sub
-                        message_bytes = json.dumps(video_data).encode('utf-8')
-                        publisher.publish(topic_path, message_bytes)
-
-                        discovered_videos.append(video_data)
-            except Exception as e:
-                print(f"Erreur lors de la recherche : {e}")
-
-        return discovered_videos
-
-@app.route('/search', methods=['POST'])
-def search_endpoint():
-    data = request.get_json() or {}
-    fighter_name = data.get('fighter_name')
-
-    if not fighter_name:
-        return jsonify({"error": "Le paramètre 'fighter_name' est requis."}), 400
-
-    agent = SearchAgent(max_results=3)
-    results = agent.search_and_publish(fighter_name)
-
-    return jsonify({
-        "status": "success",
-        "fighter": fighter_name,
-        "count": len(results),
-        "videos": results
-    }), 200
+    return jsonify({"status": "success", "videos_triggered": published_count, "fighter": fighter})
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=8080)
