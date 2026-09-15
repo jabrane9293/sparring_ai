@@ -1,0 +1,6 @@
+yt-dlp
+Flask
+gunicorn
+google-cloud-storage
+google-cloud-firestore
+google-cloud-pubsub

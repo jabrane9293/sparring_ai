@@ -1,0 +1,38 @@
+# ========================
+# Python & Environnements
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# ========================
+# IDEs & OS
+# ========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ========================
+# Données & Vidéos (Très important)
+# ========================
+*.mp4
+*.webm
+*.mkv
+*.avi
+tmp/
+temp/
+raw_videos/
+clips/
+
+# ========================
+# GCP & Sécurité
+# ========================
+# Ne JAMAIS commiter de clés de compte de service GCP
+*-key.json
+*.json
+!requirements.txt
