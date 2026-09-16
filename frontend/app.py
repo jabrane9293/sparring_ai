@@ -3,7 +3,7 @@ import requests
 
 # L'URL est maintenant fixée dans le code (ou idéalement dans un fichier .env plus tard)
 SEARCHER_URL = "https://searcher-agent-ffoyrf75aq-uc.a.run.app"
-DOWNLOADER_URL = "https://downloader-agent-ffoyrf75aq-uc.a.run.app"
+DOWNLOADER_URL = "https://downloader-agent-ffoyrf75aq-uc.a.run.app/download"
 
 # ==========================================
 # CONFIGURATION DE LA PAGE
