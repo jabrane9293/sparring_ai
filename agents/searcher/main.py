@@ -17,6 +17,7 @@ def search_videos():
       "extract_flat": True,
       "quiet": True,
       "no_warnings": True,
+      "extractor_args": {"youtube": ["player_client=android"]},
   }
 
   videos_list = []
