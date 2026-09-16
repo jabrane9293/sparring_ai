@@ -6,19 +6,19 @@ steps:
       - '-c'
       - |
         set -e
-        cp -r config agents/scraper/config
+        cp -r config agents/searcher/config
         cp -r config agents/downloader/config
         cp -r config agents/analyzer/config
         cp -r config agents/clipper/config
 
-  # 2. Construire les 4 images Docker en parallèle (gain de temps)
+  # 2. Construire les 4 images Docker en parallèle
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
         set -e
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/scraper-agent ./agents/scraper &
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/searcher-agent ./agents/searcher &
         docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/downloader-agent ./agents/downloader &
         docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/analyzer-agent ./agents/analyzer &
         docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/clipper-agent ./agents/clipper &
@@ -31,7 +31,7 @@ steps:
       - '-c'
       - |
         set -e
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/scraper-agent &
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/searcher-agent &
         docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/downloader-agent &
         docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/analyzer-agent &
         docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/clipper-agent &
@@ -44,7 +44,7 @@ steps:
       - '-c'
       - |
         set -e
-        gcloud run deploy scraper-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/scraper-agent --region us-central1 --allow-unauthenticated &
+        gcloud run deploy searcher-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/searcher-agent --region us-central1 --allow-unauthenticated &
         gcloud run deploy downloader-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/downloader-agent --region us-central1 --allow-unauthenticated &
         gcloud run deploy analyzer-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/analyzer-agent --region us-central1 --allow-unauthenticated &
         gcloud run deploy clipper-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/clipper-agent --region us-central1 --allow-unauthenticated &
