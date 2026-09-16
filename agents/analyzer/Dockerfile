@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copier le code source de l'agent (main.py, etc.)
 COPY . .
+COPY config ./config
 
 # Définir le port par défaut (l'Agent 3 utilise le 8082)
 ENV PORT=8082

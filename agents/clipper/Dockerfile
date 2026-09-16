@@ -16,6 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copie du code source
 COPY main.py .
 
+COPY config ./config
+
 # Port d'écoute pour Cloud Run / Local
 EXPOSE 8083
 
