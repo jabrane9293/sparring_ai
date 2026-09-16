@@ -9,7 +9,7 @@ st.set_page_config(
 # --- PARAMÈTRES ET URLS DES AGENTS ---
 # Remplace ces URLs par les vraies URLs publiques de tes services Cloud Run
 SEARCHER_URL = os.environ.get(
-    "SEARCHER_URL", "https://searcher-agent-ffoyrf75aq-uc.a.run.app"
+    "SEARCHER_URL", "https://searcher-agent-ffoyrf75aq-uc.a.run.app/search"
 )
 DOWNLOADER_URL = os.environ.get(
     "DOWNLOADER_URL", "https://downloader-agent-ffoyrf75aq-uc.a.run.app/download"
