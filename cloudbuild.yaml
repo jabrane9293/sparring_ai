@@ -49,3 +49,6 @@ steps:
         gcloud run deploy analyzer-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/analyzer-agent --region us-central1 --allow-unauthenticated &
         gcloud run deploy clipper-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/clipper-agent --region us-central1 --allow-unauthenticated &
         wait
+
+options:
+  logging: CLOUD_LOGGING_ONLY
