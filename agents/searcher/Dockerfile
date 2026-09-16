@@ -10,4 +10,4 @@ COPY main.py .
 # La configuration est maintenant copiée depuis le dossier local de l'agent
 COPY config ./config
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--timeout", "0", "main:app"]
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app

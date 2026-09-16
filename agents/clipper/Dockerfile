@@ -18,8 +18,4 @@ COPY main.py .
 
 COPY config ./config
 
-# Port d'écoute pour Cloud Run / Local
-EXPOSE 8083
-
-# Lancement du serveur avec Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8083", "--workers", "1", "--threads", "8", "--timeout", "0", "main:app"]
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
