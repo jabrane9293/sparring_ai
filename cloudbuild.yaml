@@ -1,0 +1,48 @@
+steps:
+  # 1. Copier la configuration dans le dossier de chaque agent avant le build
+  - name: 'ubuntu'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cp -r config agents/scraper/config
+        cp -r config agents/downloader/config
+        cp -r config agents/analyzer/config
+        cp -r config agents/clipper/config
+
+  # 2. Construire les 4 images Docker en parallèle (gain de temps)
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/scraper-agent ./agents/scraper &
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/downloader-agent ./agents/downloader &
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/analyzer-agent ./agents/analyzer &
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/clipper-agent ./agents/clipper &
+        wait
+
+  # 3. Pousser les 4 images sur Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/scraper-agent
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/downloader-agent
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/analyzer-agent
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/clipper-agent
+
+  # 4. Déployer les 4 services sur Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run deploy scraper-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/scraper-agent --region us-central1 --port 8080 --allow-unauthenticated
+        gcloud run deploy downloader-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/downloader-agent --region us-central1 --port 8081 --allow-unauthenticated
+        gcloud run deploy analyzer-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/analyzer-agent --region us-central1 --port 8082 --allow-unauthenticated
+        gcloud run deploy clipper-agent --image us-central1-docker.pkg.dev/$PROJECT_ID/sparring-repo/clipper-agent --region us-central1 --port 8083 --allow-unauthenticated
+
+options:
+  logging: CLOUD_LOGGING_ONLY
