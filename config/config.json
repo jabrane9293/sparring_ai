@@ -1,0 +1,19 @@
+{
+  "project_id": "sparring-ai-prod",
+  "region": "us-central1",
+  "gcs": {
+    "raw_videos_bucket": "sparring-ai-raw-videos",
+    "processed_clips_bucket": "sparring-ai-clips"
+  },
+  "pubsub": {
+    "video_discovered_topic": "topic-video-discovered",
+    "video_downloaded_topic": "topic-video-downloaded",
+    "sparring_detected_topic": "topic-video-analyzed"
+  },
+  "firestore": {
+    "collection_videos": "videos_metadata"
+  },
+  "ai": {
+    "model_name": "gemini-2.5-flash"
+  }
+}

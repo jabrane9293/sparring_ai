@@ -36,3 +36,4 @@ clips/
 *-key.json
 *.json
 !requirements.txt
+!config/config.json
