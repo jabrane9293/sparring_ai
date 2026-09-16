@@ -1,47 +1,48 @@
-import json
-import os
 from flask import Flask, jsonify, request
+import yt_dlp
 
 app = Flask(__name__)
 
-# --- CONFIGURATION ---
-def load_config():
-    local_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config/config.json'))
-    docker_path = '/app/config/config.json'
-    path = local_path if os.path.exists(local_path) else docker_path
-    with open(path, 'r', encoding='utf-8') as f:
-        return json.load(f)
 
-config = load_config()
-PROJECT_ID = config["project_id"]
-
-# On remplace /scrape par /search pour matcher avec Streamlit
 @app.route("/search", methods=["POST"])
-def search():
-    payload = request.get_json() or {}
-    # On récupère la bonne clé envoyée par le frontend
-    fighter_name = payload.get("fighter_name", "Default Fighter")
+def search_videos():
+  data = request.get_json() or {}
+  fighter_name = data.get("fighter_name", "").strip()
 
-    print(f"Recherche de vidéos pour {fighter_name}...")
-    
-    # TODO Phase 3: Intégrer la vraie API YouTube ici
-    # En attendant, on simule des résultats pour remplir ton interface web
-    mock_results = [
-        {
-            "title": f"{fighter_name} - Hard Sparring Session",
-            "uploader": "MMA Training Center",
-            "url": "https://www.youtube.com/watch?v=BCESF0pDe6Q"
-        },
-        {
-            "title": f"Highlights {fighter_name} Workout",
-            "uploader": "Fight Camp",
-            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-        }
-    ]
+  if not fighter_name:
+    return jsonify({"error": "Le nom du combattant est requis"}), 400
 
-    # On renvoie le dictionnaire sous la clé "results" attendue par Streamlit
-    return jsonify({"status": "success", "results": mock_results})
+  search_query = f"ytsearch5:{fighter_name} sparring OR highlights"
+  ydl_opts = {
+      "extract_flat": True,
+      "quiet": True,
+      "no_warnings": True,
+  }
+
+  videos_list = []
+  try:
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+      info = ydl.extract_info(search_query, download=False)
+      entries = info.get("entries", [])
+
+      for entry in entries:
+        video_id = entry.get("id")
+        title = entry.get("title")
+        uploader = entry.get("uploader", "Inconnu")
+        duration = entry.get("duration", 0)
+
+        videos_list.append({
+            "video_id": video_id,
+            "title": title,
+            "uploader": uploader,
+            "duration": duration,
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+        })
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+  return jsonify({"fighter": fighter_name, "videos": videos_list})
+
 
 if __name__ == "__main__":
-    # Le port 8080 est celui imposé par défaut par Cloud Run
-    app.run(host="0.0.0.0", port=8080)
+  app.run(host="0.0.0.0", port=8080)
