@@ -24,7 +24,7 @@ def download_video():
       "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
       "outtmpl": tmp_filename,
       "quiet": True,
-      "extractor_args": {"youtube": ["player_client=android"]},
+      "cookiefile": "cookies.txt",
   }
 
   try:
