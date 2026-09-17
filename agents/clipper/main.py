@@ -64,8 +64,8 @@ def clip_video():
                 "-ss", start_time,
                 "-to", end_time,
                 "-i", local_raw_path,
-                "-c:v", "libx264",
-                "-c:a", "aac",
+                "-c:v", "copy",
+                "-c:a", "copy",
                 "-avoid_negative_ts", "make_zero",
                 local_output_path,
             ]
